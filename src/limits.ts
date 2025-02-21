@@ -6,7 +6,16 @@ export class TokenLimits {
 
   constructor(model = 'gpt-3.5-turbo') {
     this.knowledgeCutOff = '2021-09-01'
-    if (model === 'gpt-4-32k') {
+    if (model === 'anthropic/claude-2') {
+      this.maxTokens = 100000
+      this.responseTokens = 4000
+    } else if (model === 'anthropic/claude-instant-1') {
+      this.maxTokens = 100000
+      this.responseTokens = 4000
+    } else if (model === 'google/palm-2-chat-bison') {
+      this.maxTokens = 8000
+      this.responseTokens = 2000
+    } else if (model === 'gpt-4-32k') {
       this.maxTokens = 32600
       this.responseTokens = 4000
     } else if (model === 'gpt-3.5-turbo-16k') {

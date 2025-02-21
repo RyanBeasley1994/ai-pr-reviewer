@@ -1,15 +1,14 @@
 import './fetch-polyfill'
 
 import {info, setFailed, warning} from '@actions/core'
-import {
-  ChatGPTAPI,
-  ChatGPTError,
+import type {
+  ChatGPTAPI as ChatGPTAPIType,
   ChatMessage,
   SendMessageOptions
-  // eslint-disable-next-line import/no-unresolved
 } from 'chatgpt'
+import {ChatGPTAPI, ChatGPTError} from 'chatgpt'
 import pRetry from 'p-retry'
-import {OpenAIOptions, Options} from './options'
+import type {OpenAIOptions, Options} from './options'
 
 // define type to save parentMessageId and conversationId
 export interface Ids {
@@ -18,13 +17,13 @@ export interface Ids {
 }
 
 export class Bot {
-  private readonly api: ChatGPTAPI | null = null // not free
+  private readonly api: ChatGPTAPIType | null = null // not free
 
   private readonly options: Options
 
   constructor(options: Options, openaiOptions: OpenAIOptions) {
     this.options = options
-    if (process.env.OPENAI_API_KEY) {
+    if (process.env.OPENROUTER_API_KEY) {
       const currentDate = new Date().toISOString().split('T')[0]
       const systemMessage = `${options.systemMessage} 
 Knowledge cutoff: ${openaiOptions.tokenLimits.knowledgeCutOff}
@@ -36,8 +35,7 @@ IMPORTANT: Entire response must be in the language with ISO code: ${options.lang
       this.api = new ChatGPTAPI({
         apiBaseUrl: options.apiBaseUrl,
         systemMessage,
-        apiKey: process.env.OPENAI_API_KEY,
-        apiOrg: process.env.OPENAI_API_ORG ?? undefined,
+        apiKey: process.env.OPENROUTER_API_KEY,
         debug: options.debug,
         maxModelTokens: openaiOptions.tokenLimits.maxTokens,
         maxResponseTokens: openaiOptions.tokenLimits.responseTokens,
@@ -48,7 +46,7 @@ IMPORTANT: Entire response must be in the language with ISO code: ${options.lang
       })
     } else {
       const err =
-        "Unable to initialize the OpenAI API, both 'OPENAI_API_KEY' environment variable are not available"
+        "Unable to initialize the OpenRouter API, 'OPENROUTER_API_KEY' environment variable is not available"
       throw new Error(err)
     }
   }
@@ -78,7 +76,7 @@ IMPORTANT: Entire response must be in the language with ISO code: ${options.lang
 
     let response: ChatMessage | undefined
 
-    if (this.api != null) {
+    if (this.api) {
       const opts: SendMessageOptions = {
         timeoutMs: this.options.openaiTimeoutMS
       }
@@ -86,9 +84,17 @@ IMPORTANT: Entire response must be in the language with ISO code: ${options.lang
         opts.parentMessageId = ids.parentMessageId
       }
       try {
-        response = await pRetry(() => this.api!.sendMessage(message, opts), {
-          retries: this.options.openaiRetries
-        })
+        response = await pRetry(
+          () => {
+            if (!this.api) {
+              throw new Error('API not initialized')
+            }
+            return this.api.sendMessage(message, opts)
+          },
+          {
+            retries: this.options.openaiRetries
+          }
+        )
       } catch (e: unknown) {
         if (e instanceof ChatGPTError) {
           info(

@@ -17,12 +17,13 @@ import {octokit} from './octokit'
 import {type Options} from './options'
 import {type Prompts} from './prompts'
 import {getTokenCount} from './tokenizer'
+import {detectBugs, type BugReport} from './bug-detector'
 
 // eslint-disable-next-line camelcase
 const context = github_context
 const repo = context.repo
 
-const ignoreKeyword = '@coderabbitai: ignore'
+const ignoreKeyword = '@nerdshark: ignore'
 
 export const codeReview = async (
   lightBot: Bot,
@@ -430,7 +431,7 @@ ${filename}: ${summary}
     if (releaseNotesResponse === '') {
       info('release notes: nothing obtained from openai')
     } else {
-      let message = '### Summary by CodeRabbit\n\n'
+      let message = '### Summary by NerdShark\n\n'
       message += releaseNotesResponse
       try {
         await commenter.updateDescription(
@@ -461,11 +462,11 @@ ${SHORT_SUMMARY_END_TAG}
 ---
 
 <details>
-<summary>Uplevel your code reviews with CodeRabbit Pro</summary>
+<summary>Uplevel your code reviews with NerdShark Pro</summary>
 
-### CodeRabbit Pro
+### NerdShark Pro
 
-If you like this project, please support us by purchasing the [Pro version](https://coderabbit.ai). The Pro version has advanced context, superior noise reduction and several proprietary improvements compared to the open source version. Moreover, CodeRabbit Pro is free for open source projects.
+If you like this project, please support us by purchasing the [Pro version](https://nerdshark.ai). The Pro version has advanced context, superior noise reduction and several proprietary improvements compared to the open source version. Moreover, NerdShark Pro is free for open source projects.
 
 </details>
 `
@@ -532,6 +533,41 @@ ${
       // make a copy of inputs
       const ins: Inputs = inputs.clone()
       ins.filename = filename
+
+      // Run bug detection first
+      let bugReports: BugReport[] = []
+      for (const [, , patch] of patches) {
+        const reports = await detectBugs(
+          heavyBot,
+          ins,
+          options,
+          filename,
+          fileContent,
+          patch
+        )
+        bugReports = [...bugReports, ...reports]
+      }
+
+      // Add bug reports to review comments
+      for (const report of bugReports) {
+        const comment = `🐛 **Potential Bug Detected**
+- **Description**: ${report.description}
+- **Confidence**: ${report.confidence}%
+- **Severity**: ${report.severity}
+
+**Suggested Fix**:
+\`\`\`suggestion
+${report.suggestedFix}
+\`\`\`
+`
+        reviewCount++
+        await commenter.bufferReviewComment(
+          filename,
+          report.lineStart,
+          report.lineEnd,
+          comment
+        )
+      }
 
       // calculate tokens based on inputs so far
       let tokens = getTokenCount(prompts.renderReviewFileDiff(ins))
@@ -685,6 +721,24 @@ ${commentChain}
 
     await Promise.all(reviewPromises)
 
+    const tipsContent = [
+      '<details>',
+      '<summary>Tips</summary>',
+      '',
+      '### Chat with NerdShark Bot',
+      '- Reply on review comments left by this bot to ask follow-up questions. A review comment is a comment on a diff or a file.',
+      '- Invite the bot into a review comment chain by tagging `@nerdshark` in a reply.',
+      '',
+      '### Code suggestions',
+      '- The bot may make code suggestions, but please review them carefully before committing since the line number ranges may be misaligned.',
+      '- You can edit the comment made by the bot and manually tweak the suggestion if it is slightly off.',
+      '',
+      '### Pausing incremental reviews',
+      '- Add `@nerdshark: ignore` anywhere in the PR description to pause further reviews from the bot.',
+      '',
+      '</details>'
+    ].join('\n')
+
     statusMsg += `
 ${
   reviewsFailed.length > 0
@@ -720,22 +774,8 @@ ${
 
 ---
 
-<details>
-<summary>Tips</summary>
+${tipsContent}`
 
-### Chat with <img src="https://avatars.githubusercontent.com/in/347564?s=41&u=fad245b8b4c7254fe63dd4dcd4d662ace122757e&v=4" alt="Image description" width="20" height="20">  CodeRabbit Bot (\`@coderabbitai\`)
-- Reply on review comments left by this bot to ask follow-up questions. A review comment is a comment on a diff or a file.
-- Invite the bot into a review comment chain by tagging \`@coderabbitai\` in a reply.
-
-### Code suggestions
-- The bot may make code suggestions, but please review them carefully before committing since the line number ranges may be misaligned. 
-- You can edit the comment made by the bot and manually tweak the suggestion if it is slightly off.
-
-### Pausing incremental reviews
-- Add \`@coderabbitai: ignore\` anywhere in the PR description to pause further reviews from the bot.
-
-</details>
-`
     // add existing_comment_ids_block with latest head sha
     summarizeComment += `\n${commenter.addReviewedCommitId(
       existingCommitIdsBlock,
@@ -1004,7 +1044,7 @@ ${review.comment}`
       currentEndLine = null
       currentComment = ''
       if (debug) {
-        info('Found comment separator')
+        info(`Found comment separator`)
       }
       continue
     }
