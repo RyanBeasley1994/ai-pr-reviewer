@@ -1,6 +1,8 @@
 import type {Bot} from './bot'
 import type {Inputs} from './inputs'
 import type {Options} from './options'
+import path from 'node:path'
+import fs from 'node:fs/promises'
 
 export interface BugReport {
   description: string
@@ -20,6 +22,10 @@ export async function detectBugs(
   fileContent: string,
   patch: string
 ): Promise<BugReport[]> {
+  // Get related files for context
+  const relatedFiles = await getRelatedFiles(filePath, options)
+  const projectContext = await buildProjectContext(relatedFiles)
+  
   const bugDetectionPrompt = `## GitHub PR Title
 
 \`$title\` 
@@ -29,6 +35,10 @@ export async function detectBugs(
 \`\`\`
 $description
 \`\`\`
+
+## Project Context
+
+${projectContext}
 
 ## File Context
 
@@ -216,4 +226,84 @@ IMPORTANT: Return ONLY valid JSON. No other text, no markdown, no code blocks.`
     console.error('Error during bug detection:', error)
     return []
   }
+}
+
+// Helper function to get related files
+async function getRelatedFiles(filePath: string, options: Options): Promise<Map<string, string>> {
+  const relatedFiles = new Map<string, string>()
+  
+  try {
+    // Get imports and dependencies from the file
+    const fileImports = await extractImports(filePath)
+    
+    // Get files in the same directory
+    const dirPath = path.dirname(filePath)
+    const dirFiles = await fs.readdir(dirPath)
+    
+    // Add related files to the map
+    for (const file of [...fileImports, ...dirFiles]) {
+      if (options.checkPath(file)) {
+        try {
+          const content = await fs.readFile(file, 'utf8')
+          relatedFiles.set(file, content)
+        } catch (error) {
+          console.warn(`Could not read file ${file}:`, error)
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('Error getting related files:', error)
+  }
+  
+  return relatedFiles
+}
+
+// Helper function to build project context string
+async function buildProjectContext(files: Map<string, string>): Promise<string> {
+  let context = '### Related Files\n\n'
+  
+  for (const [file, content] of files.entries()) {
+    context += `File: \`${file}\`\n\n\`\`\`\n${content}\n\`\`\`\n\n`
+  }
+  
+  return context
+}
+
+// Helper function to extract imports from a file
+async function extractImports(filePath: string): Promise<string[]> {
+  const imports: string[] = []
+  try {
+    const content = await fs.readFile(filePath, 'utf8')
+    
+    // Extract TypeScript/JavaScript imports
+    const importRegex = /import.*from\s+['"](.+)['"]/g
+    let match: RegExpExecArray | null = null
+    match = importRegex.exec(content)
+    while (match) {
+      if (match[1] && !match[1].startsWith('.')) {
+        match = importRegex.exec(content)
+        continue // Skip external imports
+      }
+      const importPath = path.resolve(path.dirname(filePath), match[1])
+      imports.push(importPath)
+      match = importRegex.exec(content)
+    }
+    
+    // Extract require statements
+    const requireRegex = /require\(['"](.+)['"]\)/g
+    match = requireRegex.exec(content)
+    while (match) {
+      if (match[1] && !match[1].startsWith('.')) {
+        match = requireRegex.exec(content)
+        continue // Skip external imports
+      }
+      const importPath = path.resolve(path.dirname(filePath), match[1])
+      imports.push(importPath)
+      match = requireRegex.exec(content)
+    }
+  } catch (error) {
+    console.warn(`Error extracting imports from ${filePath}:`, error)
+  }
+  
+  return imports
 }
