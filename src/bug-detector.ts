@@ -42,26 +42,30 @@ Full file context:
 ${fileContent}
 \`\`\`
 
-For each potential issue found, provide a JSON object with:
+Respond with a JSON object in this exact format:
 {
-  "description": "Detailed explanation of why this could cause problems",
-  "confidence": <number 0-100>,
-  "severity": <"low"|"medium"|"high"|"critical">,
-  "suggestedFix": "Specific code fix",
-  "lineStart": <line number>,
-  "lineEnd": <line number>
+  "analysis": "Your detailed analysis of the code and explanation of any issues found",
+  "bugReports": [
+    {
+      "description": "Detailed explanation of why this could cause problems",
+      "confidence": <number 0-100>,
+      "severity": "low" | "medium" | "high" | "critical",
+      "suggestedFix": "The exact code that should replace the problematic lines, with proper indentation preserved",
+      "lineStart": <line number>,
+      "lineEnd": <line number>
+    }
+  ]
 }
 
 Important:
-- Analyze both the changes themselves AND how they're used in the broader context
-- Consider function calls carefully - they may have bugs even if you can't see the function definition
-- Look for potential runtime issues, type mismatches, and logical errors
-- If you see a function being called, consider common bugs that could exist in its implementation
-- If no bugs are found, return an empty array []
+- Focus on actual bugs that will cause runtime issues or incorrect behavior
+- For each bug, provide the exact code that should replace the problematic lines
+- Preserve the exact indentation and code style when suggesting fixes
+- The fix should only include the specific lines that need to change
+- Do not include natural language instructions in the suggestedFix (no "Change X to Y" or "Remove Z")
+- If no bugs are found, provide your analysis explaining why and return an empty bugReports array
 
-IMPORTANT: Return ONLY a JSON array. Do not include any other text, markdown, or formatting.
-
-Analyze the code now and return an array of bug reports in JSON format.`
+IMPORTANT: Return ONLY valid JSON. No other text, no markdown, no code blocks.`
 
   try {
     // Clean up the patch to ensure it's in a standard format
@@ -81,55 +85,45 @@ Analyze the code now and return an array of bug reports in JSON format.`
       // Log the raw response for debugging
       console.debug('Raw bot response:', response)
 
-      // If response is an object with a message property (API response format)
+      // Extract the text content from various response formats
       let textToProcess = response
       if (typeof response === 'object' && response !== null) {
         interface MessageResponse {
-          message?: {
-            content?: string
-          }
+          message?: { content?: string }
           text?: string
+          detail?: { choices?: Array<{ message?: { content?: string } }> }
         }
 
         const typedResponse = response as MessageResponse
         if (typedResponse.message?.content) {
           textToProcess = typedResponse.message.content
-          console.debug('Extracted content from message:', textToProcess)
         } else if (typedResponse.text) {
           textToProcess = typedResponse.text
-          console.debug('Extracted text from response:', textToProcess)
+        } else if (typedResponse.detail?.choices?.[0]?.message?.content) {
+          textToProcess = typedResponse.detail.choices[0].message.content
         } else {
           console.error('Unexpected response format:', response)
           return []
         }
       }
 
-      // Clean up the response by removing any markdown code block formatting
-      const cleanedResponse = String(textToProcess)
-        .replace(/^```json\s*/g, '') // Remove opening ```json with any whitespace
-        .replace(/^```\s*/g, '') // Remove opening ``` with any whitespace
-        .replace(/\s*```$/g, '') // Remove closing ``` with any whitespace
-        .replace(/^\s*\[\s*\]\s*$/, '[]') // Clean up empty array formatting
+      // Strip any markdown code block syntax before parsing
+      textToProcess = textToProcess.trim()
+        .replace(/^```(?:json)?\n/, '') // Remove opening code block
+        .replace(/\n```$/, '')          // Remove closing code block
         .trim()
 
-      console.debug('Cleaned response:', cleanedResponse)
+      // Parse the response as JSON
+      const parsedResponse = JSON.parse(textToProcess)
+      
+      // Log the analysis for debugging
+      console.debug('Analysis:', parsedResponse.analysis)
 
-      // Handle empty array case
-      if (cleanedResponse === '[]') {
-        console.debug('No bugs found in the code')
-        return []
-      }
-
-      const bugReports = JSON.parse(cleanedResponse) as BugReport[]
-
-      // Validate the parsed reports
-      if (!Array.isArray(bugReports)) {
-        console.error('Bug detector response is not an array:', cleanedResponse)
-        return []
-      }
-
-      // Validate each report has required fields
-      const validReports = bugReports.filter(report => {
+      // Return the bug reports
+      const bugReports = parsedResponse.bugReports || []
+      
+      // Validate each report has required fields and proper code formatting
+      const validReports = bugReports.filter((report: BugReport) => {
         const isValid =
           typeof report.description === 'string' &&
           typeof report.confidence === 'number' &&
@@ -147,7 +141,7 @@ Analyze the code now and return an array of bug reports in JSON format.`
         return isValid
       })
 
-      return validReports.map(report => ({
+      return validReports.map((report: BugReport) => ({
         ...report,
         filePath
       }))
