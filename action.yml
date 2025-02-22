@@ -213,7 +213,7 @@ inputs:
       - **Changes**: A markdown table of files and their summaries. Group files 
         with similar changes together into a single row to save space.
       - **Poem**: Below the changes, include a whimsical, short poem written by 
-        a rabbit to celebrate the changes. Format the poem as a quote using 
+        a shark to celebrate the changes. Format the poem as a quote using 
         the ">" symbol and feel free to use emojis where relevant.
 
       Avoid additional commentary as this summary will be added as a comment on the 
@@ -237,7 +237,7 @@ inputs:
   bot_icon:
     required: false
     description: 'The icon for the bot'
-    default: '<img src="https://avatars.githubusercontent.com/in/347564?s=41" alt="Image description" width="20" height="20">'
+    default: '<img src="https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/f09a6529-50ce-40cb-a54b-b6c58d42327d/dbz504o-73b5f829-ece1-4463-84aa-61e68b701ef6.png/v1/fill/w_1024,h_808/nerdy_shark_by_greasypalms_dbz504o-fullview.png?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1cm46YXBwOjdlMGQxODg5ODIyNjQzNzNhNWYwZDQxNWVhMGQyNmUwIiwiaXNzIjoidXJuOmFwcDo3ZTBkMTg4OTgyMjY0MzczYTVmMGQ0MTVlYTBkMjZlMCIsIm9iaiI6W1t7ImhlaWdodCI6Ijw9ODA4IiwicGF0aCI6IlwvZlwvZjA5YTY1MjktNTBjZS00MGNiLWE1NGItYjZjNThkNDIzMjdkXC9kYno1MDRvLTczYjVmODI5LWVjZTEtNDQ2My04NGFhLTYxZTY4YjcwMWVmNi5wbmciLCJ3aWR0aCI6Ijw9MTAyNCJ9XV0sImF1ZCI6WyJ1cm46c2VydmljZTppbWFnZS5vcGVyYXRpb25zIl19.OtPMNBdLKtG2oxEC1F0PXe9kEquCXtojp-wXzE9YNOw" alt="Image description" width="20" height="20">'
 runs:
   using: 'node16'
   main: 'dist/index.js'
