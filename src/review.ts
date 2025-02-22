@@ -548,6 +548,18 @@ ${
         bugReports = [...bugReports, ...reports]
       }
 
+      // Track which lines have bug reports with a buffer range
+      const BUFFER_LINES = 2 // Lines of buffer above and below bug report
+      const linesWithBugReports = new Set<number>()
+      for (const report of bugReports) {
+        // Add the bug report lines plus buffer range
+        for (let line = Math.max(1, report.lineStart - BUFFER_LINES); 
+             line <= report.lineEnd + BUFFER_LINES; 
+             line++) {
+          linesWithBugReports.add(line)
+        }
+      }
+
       // Add bug reports to review comments
       for (const report of bugReports) {
         const comment = `🐛 **Potential Bug Detected**
@@ -667,6 +679,19 @@ ${commentChain}
           // parse review
           const reviews = parseReview(response, patches, options.debug)
           for (const review of reviews) {
+            // Skip review if any line in its range overlaps with a bug report range
+            let hasOverlappingBugReport = false
+            for (let line = review.startLine; line <= review.endLine; line++) {
+              if (linesWithBugReports.has(line)) {
+                hasOverlappingBugReport = true
+                info(`Skipping review comment at lines ${review.startLine}-${review.endLine} due to nearby bug report`)
+                break
+              }
+            }
+            if (hasOverlappingBugReport) {
+              continue
+            }
+
             // check for LGTM
             if (
               !options.reviewCommentLGTM &&

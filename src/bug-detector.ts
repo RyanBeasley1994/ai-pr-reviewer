@@ -20,34 +20,81 @@ export async function detectBugs(
   fileContent: string,
   patch: string
 ): Promise<BugReport[]> {
-  const bugDetectionPrompt = `You are a highly skilled code reviewer focused on detecting potential bugs and issues. Your task is to thoroughly analyze the code for any bugs, issues, or problematic patterns that could cause problems.
+  const bugDetectionPrompt = `## GitHub PR Title
 
-Input: Code changes and their context
-Task: Review for bugs, including:
-1. Issues in the changed code itself
-2. Problems with how the changed code interacts with existing code
-3. Issues with function calls, even if the function definition isn't visible
-4. Potential runtime issues based on how the code is used
+\`$title\` 
 
-Code to analyze:
-File: ${filePath}
+## Description
 
-Changes made (diff):
-\`\`\`diff
-${patch}
+\`\`\`
+$description
 \`\`\`
 
-Full file context:
+## File Context
+
+File: \`${filePath}\`
+
 \`\`\`
 ${fileContent}
 \`\`\`
 
-Respond with a JSON object in this exact format:
+## Changes to Review
+
+\`\`\`diff
+${patch}
+\`\`\`
+
+## IMPORTANT Instructions
+
+You are a highly skilled code reviewer focused on detecting potential bugs and issues. Your task is to thoroughly analyze the code changes for any bugs, issues, or problematic patterns that could cause problems.
+
+Focus Areas:
+
+1. Logic and Edge Cases
+   - Off-by-one errors
+   - Incorrect boolean conditions
+   - Missing null/undefined checks
+   - Array bounds issues
+   - Incorrect loop termination
+   - Race conditions in async code
+   - Missing error handling
+   - Unhandled edge cases
+   - State management issues
+   - Incorrect assumptions about input data
+
+2. Integration Issues
+   - Incorrect function parameter usage
+   - Type mismatches
+   - Breaking changes to interfaces/APIs
+   - Inconsistent state updates
+   - Missing or incorrect error propagation
+   - Problems with how the changed code interacts with existing code
+
+3. Runtime and Performance
+   - Memory leaks
+   - Infinite loops
+   - Blocking operations
+   - Inefficient algorithms
+   - Resource cleanup issues
+   - Unnecessary computations
+   - Potential deadlocks
+
+4. Data Flow and Security
+   - Incorrect data transformations
+   - Data loss scenarios
+   - Race conditions
+   - Inconsistent state
+   - Missing validation
+   - Security vulnerabilities
+
+## Response Format
+
+You must respond with a valid JSON object in this exact format:
 {
   "analysis": "Your detailed analysis of the code and explanation of any issues found",
   "bugReports": [
     {
-      "description": "Detailed explanation of why this could cause problems",
+      "description": "Clear explanation of why this could cause problems",
       "confidence": <number 0-100>,
       "severity": "low" | "medium" | "high" | "critical",
       "suggestedFix": "The exact code that should replace the problematic lines, with proper indentation preserved",
@@ -57,13 +104,22 @@ Respond with a JSON object in this exact format:
   ]
 }
 
-Important:
-- Focus on actual bugs that will cause runtime issues or incorrect behavior
+## Important Guidelines
+
+- Focus on both obvious bugs AND subtle logic issues that could cause problems
+- Consider all possible edge cases and execution paths
 - For each bug, provide the exact code that should replace the problematic lines
+- If the fix is to remove code, leave suggestedFix as an empty string
 - Preserve the exact indentation and code style when suggesting fixes
 - The fix should only include the specific lines that need to change
-- Do not include natural language instructions in the suggestedFix (no "Change X to Y" or "Remove Z")
+- Do not include natural language instructions in the suggestedFix
 - If no bugs are found, provide your analysis explaining why and return an empty bugReports array
+- Pay special attention to assumptions made about input data or system state
+- Assign severity levels based on potential impact:
+  - critical: Could cause system crashes, data loss, or security breaches
+  - high: Likely to cause incorrect behavior in common scenarios
+  - medium: Could cause issues in edge cases or specific conditions
+  - low: Minor issues that are unlikely to cause serious problems
 
 IMPORTANT: Return ONLY valid JSON. No other text, no markdown, no code blocks.`
 
@@ -83,7 +139,9 @@ IMPORTANT: Return ONLY valid JSON. No other text, no markdown, no code blocks.`
 
     try {
       // Log the raw response for debugging
-      console.debug('Raw bot response:', response)
+      if (options.debug) {
+        console.debug('Raw bot response:', response)
+      }
 
       // Extract the text content from various response formats
       let textToProcess = response
@@ -117,7 +175,9 @@ IMPORTANT: Return ONLY valid JSON. No other text, no markdown, no code blocks.`
       const parsedResponse = JSON.parse(textToProcess)
       
       // Log the analysis for debugging
-      console.debug('Analysis:', parsedResponse.analysis)
+      if (options.debug) {
+        console.debug('Analysis:', parsedResponse.analysis)
+      }
 
       // Return the bug reports
       const bugReports = parsedResponse.bugReports || []
@@ -135,7 +195,7 @@ IMPORTANT: Return ONLY valid JSON. No other text, no markdown, no code blocks.`
           typeof report.lineEnd === 'number' &&
           report.lineStart <= report.lineEnd
 
-        if (!isValid) {
+        if (!isValid && options.debug) {
           console.warn('Invalid bug report:', report)
         }
         return isValid
@@ -145,13 +205,15 @@ IMPORTANT: Return ONLY valid JSON. No other text, no markdown, no code blocks.`
         ...report,
         filePath
       }))
-    } catch (e) {
-      console.error('Failed to parse bug detector response:', e)
-      console.error('Raw response:', response)
+    } catch (error) {
+      console.error('Failed to parse bug detector response:', error)
+      if (options.debug) {
+        console.error('Raw response:', response)
+      }
       return []
     }
-  } catch (e) {
-    console.error('Error during bug detection:', e)
+  } catch (error) {
+    console.error('Error during bug detection:', error)
     return []
   }
 }
